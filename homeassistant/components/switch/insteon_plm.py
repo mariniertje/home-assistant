@@ -55,12 +55,12 @@ class InsteonPLMSwitchDevice(SwitchDevice):
 
     @property
     def address(self):
-        """Return the the address of the node."""
+        """Return the address of the node."""
         return self._address
 
     @property
     def name(self):
-        """Return the the name of the node."""
+        """Return the name of the node."""
         return self._name
 
     @property
@@ -83,7 +83,7 @@ class InsteonPLMSwitchDevice(SwitchDevice):
     @callback
     def async_switch_update(self, message):
         """Receive notification from transport that new data exists."""
-        _LOGGER.info('Received update calback from PLM for %s', self._address)
+        _LOGGER.info('Received update callback from PLM for %s', self._address)
         self._hass.async_add_job(self.async_update_ha_state())
 
     @asyncio.coroutine

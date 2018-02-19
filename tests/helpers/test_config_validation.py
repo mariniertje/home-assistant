@@ -405,6 +405,31 @@ def test_time_zone():
     schema('UTC')
 
 
+def test_date():
+    """Test date validation."""
+    schema = vol.Schema(cv.date)
+
+    for value in ['Not a date', '23:42', '2016-11-23T18:59:08']:
+        with pytest.raises(vol.Invalid):
+            schema(value)
+
+    schema(datetime.now().date())
+    schema('2016-11-23')
+
+
+def test_time():
+    """Test date validation."""
+    schema = vol.Schema(cv.time)
+
+    for value in ['Not a time', '2016-11-23', '2016-11-23T18:59:08']:
+        with pytest.raises(vol.Invalid):
+            schema(value)
+
+    schema(datetime.now().time())
+    schema('23:42:00')
+    schema('23:42')
+
+
 def test_datetime():
     """Test date time validation."""
     schema = vol.Schema(cv.datetime)
@@ -414,6 +439,27 @@ def test_datetime():
 
     schema(datetime.now())
     schema('2016-11-23T18:59:08')
+
+
+def test_deprecated(caplog):
+    """Test deprecation log."""
+    schema = vol.Schema({
+        'venus': cv.boolean,
+        'mars': cv.boolean
+    })
+    deprecated_schema = vol.All(
+        cv.deprecated('mars'),
+        schema
+    )
+
+    deprecated_schema({'venus': True})
+    assert len(caplog.records) == 0
+
+    deprecated_schema({'mars': True})
+    assert len(caplog.records) == 1
+    assert caplog.records[0].name == __name__
+    assert ("The 'mars' option (with value 'True') is deprecated, "
+            "please remove it from your configuration.") in caplog.text
 
 
 def test_key_dependency():
@@ -444,6 +490,21 @@ def test_has_at_least_one_key():
             schema(value)
 
     for value in ({'beer': None}, {'soda': None}):
+        schema(value)
+
+
+def test_has_at_least_one_key_value():
+    """Test has_at_least_one_key_value validator."""
+    schema = vol.Schema(cv.has_at_least_one_key_value(('drink', 'beer'),
+                                                      ('drink', 'soda'),
+                                                      ('food', 'maultaschen')))
+
+    for value in (None, [], {}, {'wine': None}, {'drink': 'water'}):
+        with pytest.raises(vol.MultipleInvalid):
+            schema(value)
+
+    for value in ({'drink': 'beer'}, {'food': 'maultaschen'},
+                  {'drink': 'soda', 'food': 'maultaschen'}):
         schema(value)
 
 

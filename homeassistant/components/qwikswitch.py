@@ -171,7 +171,7 @@ def setup(hass, config):
     def qs_callback(item):
         """Typically a button press or update signal."""
         if qsusb is None:  # Shutting down
-            _LOGGER.info("Botton press or updating signal done")
+            _LOGGER.info("Button press or updating signal done")
             return
 
         # If button pressed, fire a hass event
@@ -183,10 +183,10 @@ def setup(hass, config):
         qsreply = qsusb.devices()
         if qsreply is False:
             return
-        for item in qsreply:
-            if item[QS_ID] in QSUSB:
-                QSUSB[item[QS_ID]].update_value(
-                    round(min(item[PQS_VALUE], 100) * 2.55))
+        for itm in qsreply:
+            if itm[QS_ID] in QSUSB:
+                QSUSB[itm[QS_ID]].update_value(
+                    round(min(itm[PQS_VALUE], 100) * 2.55))
 
     def _start(event):
         """Start listening."""

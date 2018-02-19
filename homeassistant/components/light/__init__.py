@@ -5,34 +5,33 @@ For more details about this component, please refer to the documentation at
 https://home-assistant.io/components/light/
 """
 import asyncio
+import csv
 from datetime import timedelta
 import logging
 import os
-import csv
 
 import voluptuous as vol
 
-from homeassistant.core import callback
 from homeassistant.components import group
-from homeassistant.config import load_yaml_config_file
 from homeassistant.const import (
-    STATE_ON, SERVICE_TURN_ON, SERVICE_TURN_OFF, SERVICE_TOGGLE,
-    ATTR_ENTITY_ID)
+    ATTR_ENTITY_ID, SERVICE_TOGGLE, SERVICE_TURN_OFF, SERVICE_TURN_ON,
+    STATE_ON)
+from homeassistant.core import callback
+import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.config_validation import PLATFORM_SCHEMA  # noqa
 from homeassistant.helpers.entity import ToggleEntity
 from homeassistant.helpers.entity_component import EntityComponent
-from homeassistant.helpers.config_validation import PLATFORM_SCHEMA  # noqa
-import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.restore_state import async_restore_state
+from homeassistant.loader import bind_hass
 import homeassistant.util.color as color_util
 
-DOMAIN = "light"
+DOMAIN = 'light'
 DEPENDENCIES = ['group']
 SCAN_INTERVAL = timedelta(seconds=30)
 
 GROUP_NAME_ALL_LIGHTS = 'all lights'
 ENTITY_ID_ALL_LIGHTS = group.ENTITY_ID_FORMAT.format('all_lights')
 
-ENTITY_ID_FORMAT = DOMAIN + ".{}"
+ENTITY_ID_FORMAT = DOMAIN + '.{}'
 
 # Bitfield of features supported by the light entity
 SUPPORT_BRIGHTNESS = 1
@@ -139,20 +138,14 @@ PROFILE_SCHEMA = vol.Schema(
 _LOGGER = logging.getLogger(__name__)
 
 
-def extract_info(state):
-    """Extract light parameters from a state object."""
-    params = {key: state.attributes[key] for key in PROP_TO_ATTR
-              if key in state.attributes}
-    params['is_on'] = state.state == STATE_ON
-    return params
-
-
+@bind_hass
 def is_on(hass, entity_id=None):
     """Return if the lights are on based on the statemachine."""
     entity_id = entity_id or ENTITY_ID_ALL_LIGHTS
     return hass.states.is_state(entity_id, STATE_ON)
 
 
+@bind_hass
 def turn_on(hass, entity_id=None, transition=None, brightness=None,
             brightness_pct=None, rgb_color=None, xy_color=None,
             color_temp=None, kelvin=None, white_value=None,
@@ -165,6 +158,7 @@ def turn_on(hass, entity_id=None, transition=None, brightness=None,
 
 
 @callback
+@bind_hass
 def async_turn_on(hass, entity_id=None, transition=None, brightness=None,
                   brightness_pct=None, rgb_color=None, xy_color=None,
                   color_temp=None, kelvin=None, white_value=None,
@@ -191,12 +185,14 @@ def async_turn_on(hass, entity_id=None, transition=None, brightness=None,
     hass.async_add_job(hass.services.async_call(DOMAIN, SERVICE_TURN_ON, data))
 
 
+@bind_hass
 def turn_off(hass, entity_id=None, transition=None):
     """Turn all or specified light off."""
     hass.add_job(async_turn_off, hass, entity_id, transition)
 
 
 @callback
+@bind_hass
 def async_turn_off(hass, entity_id=None, transition=None):
     """Turn all or specified light off."""
     data = {
@@ -210,6 +206,7 @@ def async_turn_off(hass, entity_id=None, transition=None):
         DOMAIN, SERVICE_TURN_OFF, data))
 
 
+@bind_hass
 def toggle(hass, entity_id=None, transition=None):
     """Toggle all or specified light."""
     data = {
@@ -223,7 +220,7 @@ def toggle(hass, entity_id=None, transition=None):
 
 
 def preprocess_turn_on_alternatives(params):
-    """Processing extra data for turn light on request."""
+    """Process extra data for turn light on request."""
     profile = Profiles.get(params.pop(ATTR_PROFILE, None))
     if profile is not None:
         params.setdefault(ATTR_XY_COLOR, profile[:2])
@@ -245,7 +242,7 @@ def preprocess_turn_on_alternatives(params):
 
 @asyncio.coroutine
 def async_setup(hass, config):
-    """Expose light control via statemachine and services."""
+    """Expose light control via state machine and services."""
     component = EntityComponent(
         _LOGGER, DOMAIN, hass, SCAN_INTERVAL, GROUP_NAME_ALL_LIGHTS)
     yield from component.async_setup(config)
@@ -257,7 +254,7 @@ def async_setup(hass, config):
 
     @asyncio.coroutine
     def async_handle_light_service(service):
-        """Hande a turn light on or off service call."""
+        """Handle a turn light on or off service call."""
         # Get the validated data
         params = service.data.copy()
 
@@ -267,6 +264,7 @@ def async_setup(hass, config):
 
         preprocess_turn_on_alternatives(params)
 
+        update_tasks = []
         for light in target_lights:
             if service.service == SERVICE_TURN_ON:
                 yield from light.async_turn_on(**params)
@@ -275,38 +273,25 @@ def async_setup(hass, config):
             else:
                 yield from light.async_toggle(**params)
 
-        update_tasks = []
-
-        for light in target_lights:
             if not light.should_poll:
                 continue
-
-            update_coro = hass.async_add_job(
-                light.async_update_ha_state(True))
-            if hasattr(light, 'async_update'):
-                update_tasks.append(update_coro)
-            else:
-                yield from update_coro
+            update_tasks.append(light.async_update_ha_state(True))
 
         if update_tasks:
             yield from asyncio.wait(update_tasks, loop=hass.loop)
 
     # Listen for light on and light off service calls.
-    descriptions = yield from hass.async_add_job(
-        load_yaml_config_file, os.path.join(
-            os.path.dirname(__file__), 'services.yaml'))
-
     hass.services.async_register(
         DOMAIN, SERVICE_TURN_ON, async_handle_light_service,
-        descriptions.get(SERVICE_TURN_ON), schema=LIGHT_TURN_ON_SCHEMA)
+        schema=LIGHT_TURN_ON_SCHEMA)
 
     hass.services.async_register(
         DOMAIN, SERVICE_TURN_OFF, async_handle_light_service,
-        descriptions.get(SERVICE_TURN_OFF), schema=LIGHT_TURN_OFF_SCHEMA)
+        schema=LIGHT_TURN_OFF_SCHEMA)
 
     hass.services.async_register(
         DOMAIN, SERVICE_TOGGLE, async_handle_light_service,
-        descriptions.get(SERVICE_TOGGLE), schema=LIGHT_TOGGLE_SCHEMA)
+        schema=LIGHT_TOGGLE_SCHEMA)
 
     return True
 
@@ -432,9 +417,3 @@ class Light(ToggleEntity):
     def supported_features(self):
         """Flag supported features."""
         return 0
-
-    @asyncio.coroutine
-    def async_added_to_hass(self):
-        """Component added, restore_state using platforms."""
-        if hasattr(self, 'async_restore_state'):
-            yield from async_restore_state(self, extract_info)

@@ -95,7 +95,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     except lnetatmo.NoDevice:
         return None
 
-    add_devices(dev)
+    add_devices(dev, True)
 
 
 class NetAtmoSensor(Entity):
@@ -113,19 +113,11 @@ class NetAtmoSensor(Entity):
         module_id = self.netatmo_data.\
             station_data.moduleByName(module=module_name)['_id']
         self.module_id = module_id[1]
-        self._unique_id = "Netatmo Sensor {0} - {1} ({2})".format(
-            self._name, module_id, self.type)
-        self.update()
 
     @property
     def name(self):
         """Return the name of the sensor."""
         return self._name
-
-    @property
-    def unique_id(self):
-        """Return the unique ID for this sensor."""
-        return self._unique_id
 
     @property
     def icon(self):

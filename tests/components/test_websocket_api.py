@@ -8,8 +8,9 @@ import pytest
 
 from homeassistant.core import callback
 from homeassistant.components import websocket_api as wapi, frontend
+from homeassistant.setup import async_setup_component
 
-from tests.common import mock_http_component_app, mock_coro
+from tests.common import mock_coro
 
 API_PASSWORD = 'test1234'
 
@@ -17,10 +18,10 @@ API_PASSWORD = 'test1234'
 @pytest.fixture
 def websocket_client(loop, hass, test_client):
     """Websocket client fixture connected to websocket server."""
-    websocket_app = mock_http_component_app(hass)
-    wapi.WebsocketAPIView().register(websocket_app.router)
+    assert loop.run_until_complete(
+        async_setup_component(hass, 'websocket_api'))
 
-    client = loop.run_until_complete(test_client(websocket_app))
+    client = loop.run_until_complete(test_client(hass.http.app))
     ws = loop.run_until_complete(client.ws_connect(wapi.URL))
 
     auth_ok = loop.run_until_complete(ws.receive_json())
@@ -35,10 +36,14 @@ def websocket_client(loop, hass, test_client):
 @pytest.fixture
 def no_auth_websocket_client(hass, loop, test_client):
     """Websocket connection that requires authentication."""
-    websocket_app = mock_http_component_app(hass, API_PASSWORD)
-    wapi.WebsocketAPIView().register(websocket_app.router)
+    assert loop.run_until_complete(
+        async_setup_component(hass, 'websocket_api', {
+            'http': {
+                'api_password': API_PASSWORD
+            }
+        }))
 
-    client = loop.run_until_complete(test_client(websocket_app))
+    client = loop.run_until_complete(test_client(hass.http.app))
     ws = loop.run_until_complete(client.ws_connect(wapi.URL))
 
     auth_ok = loop.run_until_complete(ws.receive_json())
@@ -288,9 +293,9 @@ def test_get_config(hass, websocket_client):
 @asyncio.coroutine
 def test_get_panels(hass, websocket_client):
     """Test get_panels command."""
-    frontend.register_built_in_panel(hass, 'map', 'Map',
-                                     'mdi:account-location')
-
+    yield from hass.components.frontend.async_register_built_in_panel(
+        'map', 'Map', 'mdi:account-location')
+    hass.data[frontend.DATA_JS_VERSION] = 'es5'
     websocket_client.send_json({
         'id': 5,
         'type': wapi.TYPE_GET_PANELS,
@@ -300,7 +305,14 @@ def test_get_panels(hass, websocket_client):
     assert msg['id'] == 5
     assert msg['type'] == wapi.TYPE_RESULT
     assert msg['success']
-    assert msg['result'] == hass.data[frontend.DATA_PANELS]
+    assert msg['result'] == {'map': {
+        'component_name': 'map',
+        'url_path': 'map',
+        'config': None,
+        'url': None,
+        'icon': 'mdi:account-location',
+        'title': 'Map',
+    }}
 
 
 @asyncio.coroutine

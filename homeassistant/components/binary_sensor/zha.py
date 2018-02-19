@@ -32,12 +32,12 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     if discovery_info is None:
         return
 
-    from bellows.zigbee.zcl.clusters.security import IasZone
+    from zigpy.zcl.clusters.security import IasZone
 
-    clusters = discovery_info['clusters']
+    in_clusters = discovery_info['in_clusters']
 
     device_class = None
-    cluster = [c for c in clusters if isinstance(c, IasZone)][0]
+    cluster = in_clusters[IasZone.cluster_id]
     if discovery_info['new_join']:
         yield from cluster.bind()
         ieee = cluster.endpoint.device.application.ieee
@@ -63,8 +63,8 @@ class BinarySensor(zha.Entity, BinarySensorDevice):
         """Initialize the ZHA binary sensor."""
         super().__init__(**kwargs)
         self._device_class = device_class
-        from bellows.zigbee.zcl.clusters.security import IasZone
-        self._ias_zone_cluster = self._clusters[IasZone.cluster_id]
+        from zigpy.zcl.clusters.security import IasZone
+        self._ias_zone_cluster = self._in_clusters[IasZone.cluster_id]
 
     @property
     def is_on(self) -> bool:
@@ -78,7 +78,7 @@ class BinarySensor(zha.Entity, BinarySensorDevice):
         """Return the class of this device, from component DEVICE_CLASSES."""
         return self._device_class
 
-    def cluster_command(self, aps_frame, tsn, command_id, args):
+    def cluster_command(self, tsn, command_id, args):
         """Handle commands received to this cluster."""
         if command_id == 0:
             self._state = args[0] & 3
